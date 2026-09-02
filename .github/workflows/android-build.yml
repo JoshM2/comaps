@@ -14,26 +14,37 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
+    # 1. Setup Node.js (Required for React Native asset bundling)
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20' # Or your project's target Node version
+        cache: 'npm'
+
+    # 2. Install Root Dependencies (Creates node_modules required by Gradle)
+    - name: Install Dependencies
+      run: npm install
+
+    # 3. Setup Java Environment
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         distribution: 'zulu'
         java-version: '17'
         cache: 'gradle'
-        # Tells the cache runner where to find the build.gradle file
         cache-dependency-path: 'android/build.gradle' 
 
-    # Fix: Looks for gradlew inside the android folder
+    # 4. Make Gradle Wrapper Executable
     - name: Grant Execute Permission for Gradlew
       run: chmod +x gradlew
       working-directory: ./android
 
-    # Fix: Runs the build task inside the android folder
+    # 5. Build Debug APK (Will now find node modules & generate the file)
     - name: Build Debug APK
       run: ./gradlew assembleDebug
       working-directory: ./android
 
-    # Fix: Updates the path to look inside the android subfolder
+    # 6. Upload Build Artifact
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
