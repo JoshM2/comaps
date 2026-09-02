@@ -1,6 +1,5 @@
 name: Android CI Build
 
-# Triggers the workflow on push or pull request events for the main branch
 on:
   push:
     branches: [ "main" ]
@@ -12,29 +11,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Check out your repository code so the runner can access it
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # Step 2: Set up Java JDK (Android requires Java; match this to your project version)
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        distribution: 'zulu' # A reliable, widely used Java distribution
+        distribution: 'zulu'
         java-version: '17'
-        cache: 'gradle'      # Caches Gradle dependencies to speed up future builds
+        cache: 'gradle'
+        # Tells the cache runner where to find the build.gradle file
+        cache-dependency-path: 'android/build.gradle' 
 
-    # Step 3: Grant execute permission to the Gradle wrapper script
+    # Fix: Looks for gradlew inside the android folder
     - name: Grant Execute Permission for Gradlew
       run: chmod +x gradlew
+      working-directory: ./android
 
-    # Step 4: Run the Gradle assembleDebug build task
+    # Fix: Runs the build task inside the android folder
     - name: Build Debug APK
       run: ./gradlew assembleDebug
+      working-directory: ./android
 
-    # Step 5: Upload the generated APK file so you can download it from GitHub
+    # Fix: Updates the path to look inside the android subfolder
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
         name: app-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
