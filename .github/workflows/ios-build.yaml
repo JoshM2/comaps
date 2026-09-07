@@ -1,0 +1,159 @@
+name: iOS Build
+
+# Compiles the iOS app on demand and uploads the result as a downloadable
+# artifact. Unlike ios-check.yaml (which gates pushes to main and throws the
+# products away), this workflow exists to hand you a build you can install.
+#
+# Device builds are UNSIGNED: the .ipa will not install on a stock iPhone.
+# Use it with a sideloading tool that re-signs (AltStore, Sideloadly), or run
+# the simulator .app locally. Signed TestFlight builds go through
+# `fastlane upload_testflight` instead, which needs the release secrets.
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: Build configuration
+        type: choice
+        options:
+          - Release
+          - Debug
+        default: Release
+      device:
+        description: Build unsigned .ipa for devices
+        type: boolean
+        default: true
+      simulator:
+        description: Build .app for the iOS Simulator
+        type: boolean
+        default: false
+
+jobs:
+  ios-build:
+    name: Build iOS (${{ inputs.configuration }})
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.1.app/Contents/Developer
+      LANG: en_US.UTF-8
+      LANGUAGE: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    # Cancels previous runs of this workflow on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ inputs.configuration }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Validate inputs
+        if: ${{ !inputs.device && !inputs.simulator }}
+        run: |
+          echo "::error::Enable at least one of 'device' or 'simulator'."
+          exit 1
+
+      - name: Install dependencies
+        run: |
+          brew install qt optipng
+          pip3 install "protobuf<3.21" --break-system-packages
+          xcodebuild -downloadComponent metalToolchain
+          xcodebuild -downloadPlatform iOS
+
+      - name: Checkout sources
+        uses: actions/checkout@v6
+
+      - name: Parallel submodules checkout
+        shell: bash
+        run: git submodule update --depth 1 --init --recursive --jobs=$(($(sysctl -n hw.logicalcpu) * 20))
+
+      - name: Configure repository
+        shell: bash
+        run: ./configure.sh
+
+      - name: Configure Xcode cache
+        uses: irgaly/xcode-cache@v1
+        with:
+          key: xcode-cache-deriveddata-${{ github.workflow }}-${{ inputs.configuration }}-${{ github.sha }}
+          restore-keys: xcode-cache-deriveddata-${{ github.workflow }}-${{ inputs.configuration }}
+
+      - name: Compute artifact suffix
+        id: naming
+        shell: bash
+        run: echo "suffix=${{ inputs.configuration }}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Archive for device
+        if: ${{ inputs.device }}
+        shell: bash
+        run: |
+          xcodebuild archive \
+            -workspace xcode/CoMaps.xcworkspace \
+            -scheme CoMaps \
+            -configuration ${{ inputs.configuration }} \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/CoMaps.xcarchive \
+            -quiet \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS=""
+
+      - name: Package unsigned .ipa
+        if: ${{ inputs.device }}
+        shell: bash
+        run: |
+          # The product name differs per configuration ("CoMaps.app" vs
+          # "CoMaps (Debug).app"), so discover it rather than hardcoding.
+          app=$(find build/CoMaps.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$app" ]; then
+            echo "::error::No .app found in the archive."
+            exit 1
+          fi
+          echo "Packaging $app"
+          # -exportArchive needs a signing identity, so build the IPA layout by
+          # hand: an .ipa is just a zip with the app under Payload/.
+          mkdir -p build/Payload
+          cp -R "$app" build/Payload/
+          (cd build && zip -qry "CoMaps-${{ steps.naming.outputs.suffix }}-unsigned.ipa" Payload)
+
+      - name: Upload unsigned .ipa
+        if: ${{ inputs.device }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-ipa-${{ steps.naming.outputs.suffix }}-unsigned
+          path: build/CoMaps-*-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build for simulator
+        if: ${{ inputs.simulator }}
+        shell: bash
+        run: |
+          xcodebuild build \
+            -workspace xcode/CoMaps.xcworkspace \
+            -scheme CoMaps \
+            -configuration ${{ inputs.configuration }} \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/simulator \
+            -quiet \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package simulator .app
+        if: ${{ inputs.simulator }}
+        shell: bash
+        run: |
+          products="build/simulator/Build/Products/${{ inputs.configuration }}-iphonesimulator"
+          app=$(find "$products" -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$app" ]; then
+            echo "::error::No .app found in $products."
+            exit 1
+          fi
+          echo "Packaging $app"
+          # Zip preserving symlinks so the bundle survives the round trip.
+          (cd "$products" && zip -qry "$GITHUB_WORKSPACE/build/CoMaps-${{ steps.naming.outputs.suffix }}-simulator.zip" "$(basename "$app")")
+
+      - name: Upload simulator .app
+        if: ${{ inputs.simulator }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-simulator-${{ steps.naming.outputs.suffix }}
+          path: build/CoMaps-*-simulator.zip
+          if-no-files-found: error
+          retention-days: 14
