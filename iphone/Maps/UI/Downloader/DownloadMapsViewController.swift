@@ -212,6 +212,7 @@ class DownloadMapsViewController: MWMViewController {
       case .showOnMap:
         action = UIAlertAction(title: L("zoom_to_country"), style: .default, handler: { _ in
           Storage.shared().showNode(nodeAttrs.countryId)
+          self.searchController.isActive = false
           self.navigationController?.popToRootViewController(animated: true)
         })
       case .download:
@@ -588,8 +589,6 @@ extension DownloadMapsViewController: DownloadAllViewDelegate {
   func onDownloadButtonPressed() {
     skipCountryEvent = true
     let id = dataSource.getParentCountryId()
-    // Follow what the bar actually offers instead of the browsing mode: updating uses diffs and
-    // touches only the maps present on disk, while downloading fetches whole files.
     if downloadAllView.style == .update {
       Storage.shared().updateNode(id)
     } else {
