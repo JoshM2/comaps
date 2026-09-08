@@ -268,6 +268,10 @@ class DownloadMapsViewController: MWMViewController {
         downloadAllView.state = .ready
         downloadAllView.style = .download
         downloadAllView.downloadSize = parentAttributes.totalSize - parentAttributes.downloadedSize
+      } else if parentAttributes.totalUpdateSizeBytes > 0 {
+        downloadAllView.state = .ready
+        downloadAllView.style = .update
+        downloadAllView.downloadSize = parentAttributes.totalUpdateSizeBytes
       }
     case .downloaded:
       let isUpdate = parentAttributes.totalUpdateSizeBytes > 0
@@ -584,7 +588,9 @@ extension DownloadMapsViewController: DownloadAllViewDelegate {
   func onDownloadButtonPressed() {
     skipCountryEvent = true
     let id = dataSource.getParentCountryId()
-    if mode == .downloaded {
+    // Follow what the bar actually offers instead of the browsing mode: updating uses diffs and
+    // touches only the maps present on disk, while downloading fetches whole files.
+    if downloadAllView.style == .update {
       Storage.shared().updateNode(id)
     } else {
       Storage.shared().downloadNode(id)
