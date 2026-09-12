@@ -14,8 +14,13 @@ struct MapSearchButton: View {
     
     /// The default height of a map control
     var controlHeight: CGFloat
-    
-    
+
+
+    /// The frame of the bar itself, in window coordinates, handed to the search sheet so that it can
+    /// animate the bar into its own search field
+    @State private var frame: CGRect = .zero
+
+
     /// The actual view
     var body: some View {
         HStack(spacing: 0) {
@@ -34,6 +39,9 @@ struct MapSearchButton: View {
             .accessibilityHidden(true)
             .overlay {
                 Button {
+                    SearchBarMorph.setPendingSource(frame: frame, containerSize: UIScreen.main.bounds.size)
+                    SearchBarMorph.isMorphing = true
+
                     NotificationCenter.default.post(Notification(name: MapControls.presentSearchNotificationName))
                 } label: {
                     Label("search", systemImage: "magnifyingglass")
@@ -60,6 +68,28 @@ struct MapSearchButton: View {
                     .shadow(radius: 2)
                     .foregroundStyle(Color.secondary)
                     .compositingGroup()
+            }
+            .background {
+                GeometryReader { barGeometry in
+                    if #available(iOS 16.0, *) {
+                        Color.black
+                            .hidden()
+                            .onAppear {
+                                frame = barGeometry.frame(in: .global)
+                            }
+                            .onGeometryChange(for: CGRect.self) { changedBarGeometry in
+                                changedBarGeometry.frame(in: .global)
+                            } action: { changedFrame in
+                                frame = changedFrame
+                            }
+                    } else {
+                        Color.black
+                            .hidden()
+                            .onAppear {
+                                frame = barGeometry.frame(in: .global)
+                            }
+                    }
+                }
             }
             .contentShape(Rectangle())
             .padding(.leading, verticalSizeClass == .compact ? (controlHeight + 24) : 0)

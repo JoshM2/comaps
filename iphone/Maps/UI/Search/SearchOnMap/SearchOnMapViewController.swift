@@ -24,6 +24,9 @@ final class SearchOnMapViewController: UIViewController {
     static let panGestureThreshold: CGFloat = 5
     static let dimAlpha: CGFloat = 0.3
     static let dimViewThreshold: CGFloat = 50
+    /// When the real search field takes over from the morph stand-in, as a fraction of the morph.
+    static let morphHandoverStart: TimeInterval = 0.7
+    static let morphHandoverDuration: TimeInterval = 0.1
   }
 
   var interactor: SearchOnMapInteractor?
@@ -42,6 +45,7 @@ final class SearchOnMapViewController: UIViewController {
   private var internalScrollViewContentOffset: CGFloat = .zero
   private let presentationStepsController = ModalPresentationStepsController()
   private var searchResults = SearchOnMap.SearchResults([])
+  private var morphView: SearchBarMorphView?
 
   // MARK: - Init
   init() {
@@ -361,6 +365,125 @@ final class SearchOnMapViewController: UIViewController {
     }
   }
 
+  // MARK: - Search Bar Morph
+  /// Whether the pill on the map can be animated into the search field.
+  ///
+  /// Only on a portrait iPhone, where the sheet really does rise from the bottom of the screen and
+  /// the field ends up at the top. On iPad and in landscape the sheet is a side panel, so the motion
+  /// would not describe what is happening.
+  private var canMorphSearchBar: Bool {
+    !isiPad && traitCollection.verticalSizeClass == .regular
+  }
+
+  /// The frame the search field occupies once the sheet is fully presented, in `view` coordinates.
+  ///
+  /// Derived arithmetically rather than by laying the sheet out at its final position, so that
+  /// `availableAreaView.frame` is left where the presentation animation needs to start from. This
+  /// holds because the sheet's width is the same at every step on a portrait iPhone, and
+  /// `contentView`'s origin tracks `availableAreaView`'s.
+  private var fullScreenSearchBarFrame: CGRect {
+    let sheetFrame = ModalPresentationStep.fullScreen.frame(for: availableAreaView, in: self)
+    let barInSheet = headerView.convert(headerView.searchBarFrame, to: contentView)
+    return barInSheet.offsetBy(dx: sheetFrame.minX, dy: sheetFrame.minY)
+  }
+
+  /// The frame the search field occupies right now, in `view` coordinates.
+  private var currentSearchBarFrame: CGRect {
+    headerView.convert(headerView.searchBarFrame, to: view)
+  }
+
+  private func addMorphView(at frame: CGRect) -> SearchBarMorphView {
+    morphView?.removeFromSuperview()
+    let morphView = SearchBarMorphView(fieldAppearance: headerView.searchFieldAppearance)
+    morphView.frame = frame
+    view.addSubview(morphView)
+    self.morphView = morphView
+    return morphView
+  }
+
+  /// Take down a stand-in once its animation has finished, leaving alone whichever one is current:
+  /// dismissing during the opening morph supersedes it with one going the other way.
+  private func removeMorphView(_ morphView: SearchBarMorphView) {
+    morphView.removeFromSuperview()
+    if self.morphView === morphView {
+      self.morphView = nil
+    }
+  }
+
+  /// Animate the map's search pill up into the search field, if this presentation came from the pill.
+  ///
+  /// Runs on the same curve and duration as the sheet's own slide, so the stand-in and the panel
+  /// arrive together.
+  ///
+  /// `SearchBarMorph.isMorphing` stays set for as long as search is open, not just for this
+  /// animation: the pill's visibility has to stay under the morph's control until it is handed back
+  /// by the reverse animation. Otherwise the pill would reappear for a frame on the way out, because
+  /// `SearchOnMapInteractor.closeSearch()` clears `IsSearchPresented` before `close()` is reached.
+  private func morphFromSearchButtonIfNeeded() {
+    let source = SearchBarMorph.consumePendingSource()
+    guard canMorphSearchBar, SearchBarMorph.collapseTarget(in: view.bounds.size) != nil else {
+      // Either a layout the morph does not cover, or the pill has never reported a position.
+      SearchBarMorph.isMorphing = false
+      return
+    }
+    // Armed even when there is no source frame, so that search opened by the ⌘F key command or the
+    // 3D-touch action still collapses back into the pill.
+    SearchBarMorph.isMorphing = true
+
+    guard let source else { return }
+
+    let destination = fullScreenSearchBarFrame
+    let morphView = addMorphView(at: view.convert(source.frame, from: nil))
+    morphView.applyPillAppearance()
+    headerView.setSearchFieldHidden(true)
+
+    ModalPresentationAnimator.animate(with: .slide) {
+      morphView.frame = destination
+      morphView.applyFieldAppearance()
+    } completion: { [weak self] _ in
+      self?.removeMorphView(morphView)
+    }
+    handOverToSearchField(from: morphView)
+  }
+
+  /// Animate the search field back down into the map's search pill, handing the pill back when it lands.
+  private func morphToSearchButtonIfNeeded() {
+    guard canMorphSearchBar,
+          SearchBarMorph.isMorphing,
+          let destination = SearchBarMorph.collapseTarget(in: view.bounds.size) else {
+      SearchBarMorph.isMorphing = false
+      return
+    }
+
+    let morphView = addMorphView(at: currentSearchBarFrame)
+    morphView.applyFieldAppearance()
+    headerView.setSearchFieldHidden(true)
+
+    ModalPresentationAnimator.animate(with: .slide) {
+      morphView.frame = destination
+      morphView.applyPillAppearance()
+    } completion: { [weak self] _ in
+      self?.removeMorphView(morphView)
+      // Hands the bar back: the overlay shows it again, exactly where the stand-in landed.
+      SearchBarMorph.isMorphing = false
+    }
+  }
+
+  /// Cross-fade the real search field in over the tail of the morph, so any mismatch between the
+  /// stand-in and the field itself is never visible.
+  private func handOverToSearchField(from morphView: SearchBarMorphView) {
+    let duration = kDefaultAnimationDuration
+    UIView.animate(withDuration: duration * Constants.morphHandoverDuration,
+                   delay: duration * Constants.morphHandoverStart,
+                   options: .curveEaseInOut) { [weak self, weak morphView] in
+      // A dismissal during the opening morph replaces the stand-in with one going the other way;
+      // this hand-off belongs to the old one and must not reveal the field over the new one.
+      guard let self, let morphView, self.morphView === morphView else { return }
+      self.headerView.setSearchFieldHidden(false)
+      morphView.alpha = 0
+    }
+  }
+
   private func setIsSearching(_ isSearching: Bool) {
     headerView.setIsSearching(isSearching)
   }
@@ -382,6 +505,7 @@ extension SearchOnMapViewController: SearchOnMapView {
   }
 
   func show() {
+    morphFromSearchButtonIfNeeded()
     interactor?.handle(.openSearch)
   }
 
@@ -389,6 +513,7 @@ extension SearchOnMapViewController: SearchOnMapView {
     headerView.setIsSearching(false)
     updateDimView(for: presentationStepsController.hiddenFrame)
     willMove(toParent: nil)
+    morphToSearchButtonIfNeeded()
     presentationStepsController.close { [weak self] in
       self?.view.removeFromSuperview()
       self?.removeFromParent()

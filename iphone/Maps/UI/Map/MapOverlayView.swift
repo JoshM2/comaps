@@ -87,6 +87,10 @@ struct MapOverlayView: View {
     
     /// A necessary adjusmented need for the externally presented search
     @AppStorage("SearchAdjustment") private var searchAdjustment: Double = 0
+
+
+    /// If the search bar is being animated into, or out of, the externally presented search, in which case a stand-in is on screen in its place
+    @AppStorage(SearchBarMorph.isMorphingKey) private var isMorphingSearchBar: Bool = false
     
     
     /// If the keyboard is being presented externally
@@ -180,6 +184,15 @@ struct MapOverlayView: View {
                         if !isSearchPresented {
                             MapSearchButton(controlHeight: controlHeight)
                                 .frame(height: controlHeight)
+                            // While the search sheet animates the bar into, or out of, its own search
+                            // field, a stand-in stands in for this one. Hiding by opacity rather than
+                            // by the condition above, pinned to no animation, keeps the hand-off exact
+                            // in both directions: the two are never on screen together, and the bar
+                            // reappears precisely where the stand-in lands. The spring on
+                            // `isSearchPresented` is left untouched for search opened another way.
+                                .opacity(isMorphingSearchBar ? 0 : 1)
+                                .allowsHitTesting(!isMorphingSearchBar)
+                                .animation(nil, value: isMorphingSearchBar)
                         }
                     }
                 }

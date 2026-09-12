@@ -145,6 +145,35 @@ final class SearchOnMapHeaderView: UIView {
     SearchQuery(searchBar.text ?? "", locale: searchBar.textInputMode?.primaryLanguage, source: .typedText)
   }
 
+  /// The search field's frame, in this view's coordinates. Used to place the morph stand-in.
+  var searchBarFrame: CGRect {
+    searchBar.frame
+  }
+
+  /// The search field's current look, so that the morph stand-in can land on a matching appearance
+  /// in either theme.
+  ///
+  /// Read off the field rather than hardcoded, with fallbacks for iOS 26, where `UISearchBarRenderer`
+  /// opts out and leaves the field system-drawn: there the field reports neither a background colour
+  /// nor a corner radius, so the stand-in settles on a capsule instead.
+  var searchFieldAppearance: SearchBarMorphView.FieldAppearance {
+    let textField = searchBar.searchTextField
+    let cornerRadius = textField.layer.cornerRadius
+    return SearchBarMorphView.FieldAppearance(backgroundColor: textField.backgroundColor ?? .secondarySystemFill,
+                                              cornerRadius: cornerRadius > 0 ? cornerRadius : Constants.searchBarHeight / 2,
+                                              // matches the placeholder colour set by UISearchBarRenderer
+                                              textColor: .gray,
+                                              tintColor: textField.leftView?.tintColor ?? .secondaryLabel)
+  }
+
+  /// Hide just the search field and the cancel button, leaving the grabber and separator to move
+  /// with the sheet as usual while the morph stand-in covers for them.
+  func setSearchFieldHidden(_ hidden: Bool) {
+    let alpha: CGFloat = hidden ? 0 : 1
+    searchBar.alpha = alpha
+    cancelContainer.alpha = alpha
+  }
+
   func setSeparatorHidden(_ hidden: Bool) {
     separator?.isHidden = hidden
   }
