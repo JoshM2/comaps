@@ -538,6 +538,8 @@
 		EDA6D3FA2E5EF97100D6C1F3 /* InfoItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDA6D3F92E5EF97100D6C1F3 /* InfoItemView.swift */; };
 		EDB71D8C2D8474A0004A6A7F /* CornerRadius.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDB71D8B2D8474A0004A6A7F /* CornerRadius.swift */; };
 		EDB71E002D8B0338004A6A7F /* ModalPresentationAnimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDB71DFF2D8B0338004A6A7F /* ModalPresentationAnimator.swift */; };
+		C0A1B2C32E00000100000002 /* SearchBarMorph.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C32E00000100000001 /* SearchBarMorph.swift */; };
+		C0A1B2C32E00000100000004 /* SearchBarMorphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C32E00000100000003 /* SearchBarMorphView.swift */; };
 		EDB71E042D8B0943004A6A7F /* SearchOnMapAreaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDB71E032D8B0943004A6A7F /* SearchOnMapAreaView.swift */; };
 		EDBD68072B625724005DD151 /* LocationServicesDisabledAlert.xib in Resources */ = {isa = PBXBuildFile; fileRef = EDBD68062B625724005DD151 /* LocationServicesDisabledAlert.xib */; };
 		EDBD680B2B62572E005DD151 /* LocationServicesDisabledAlert.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDBD680A2B62572E005DD151 /* LocationServicesDisabledAlert.swift */; };
@@ -1546,6 +1548,8 @@
 		EDA6D3F92E5EF97100D6C1F3 /* InfoItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoItemView.swift; sourceTree = "<group>"; };
 		EDB71D8B2D8474A0004A6A7F /* CornerRadius.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerRadius.swift; sourceTree = "<group>"; };
 		EDB71DFF2D8B0338004A6A7F /* ModalPresentationAnimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalPresentationAnimator.swift; sourceTree = "<group>"; };
+		C0A1B2C32E00000100000001 /* SearchBarMorph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBarMorph.swift; sourceTree = "<group>"; };
+		C0A1B2C32E00000100000003 /* SearchBarMorphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBarMorphView.swift; sourceTree = "<group>"; };
 		EDB71E032D8B0943004A6A7F /* SearchOnMapAreaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchOnMapAreaView.swift; sourceTree = "<group>"; };
 		EDBD68062B625724005DD151 /* LocationServicesDisabledAlert.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = LocationServicesDisabledAlert.xib; sourceTree = "<group>"; };
 		EDBD680A2B62572E005DD151 /* LocationServicesDisabledAlert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationServicesDisabledAlert.swift; sourceTree = "<group>"; };
@@ -3313,6 +3317,8 @@
 				ED5E02132D8B17B600A5CC7B /* ModalPresentationStepsController.swift */,
 				EDB71DFF2D8B0338004A6A7F /* ModalPresentationAnimator.swift */,
 				ED70D57C2D539A2500738C1E /* ModalPresentationStep.swift */,
+				C0A1B2C32E00000100000001 /* SearchBarMorph.swift */,
+				C0A1B2C32E00000100000003 /* SearchBarMorphView.swift */,
 			);
 			path = Presentation;
 			sourceTree = "<group>";
@@ -4592,6 +4598,8 @@
 				99514BB823E82B450085D3A7 /* ElevationProfilePresenter.swift in Sources */,
 				34C9BD031C6DB693000DC38D /* MWMTableViewController.m in Sources */,
 				EDB71E002D8B0338004A6A7F /* ModalPresentationAnimator.swift in Sources */,
+				C0A1B2C32E00000100000002 /* SearchBarMorph.swift in Sources */,
+				C0A1B2C32E00000100000004 /* SearchBarMorphView.swift in Sources */,
 				F6E2FD8C1E097BA00083EBEC /* MWMNoMapsView.m in Sources */,
 				34D3B0361E389D05004100F9 /* MWMEditorSelectTableViewCell.m in Sources */,
 				2765818F2F1E7F53002478CD /* Mode.swift in Sources */,
