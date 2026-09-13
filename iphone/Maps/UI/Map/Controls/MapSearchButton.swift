@@ -70,14 +70,16 @@ struct MapSearchButton: View {
     /// The tappable label
     private var button: some View {
         Button {
-            SearchBarMorph.setPendingSource(frame: frame, containerSize: UIScreen.main.bounds.size)
+            SearchBarMorph.setPendingFrame(frame)
             SearchBarMorph.isMorphing = true
 
             NotificationCenter.default.post(Notification(name: MapControls.presentSearchNotificationName))
         } label: {
             Label("search", systemImage: "magnifyingglass")
                 .foregroundStyle(.secondary)
-                .padding(.leading)
+                // Where the search sheet's text field puts its own magnifying glass, so the icon
+                // stays put when this bar becomes that field
+                .padding(.leading, SearchBarAppearance.contentInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .compositingGroup()
                 .background(.white.opacity(0.01))

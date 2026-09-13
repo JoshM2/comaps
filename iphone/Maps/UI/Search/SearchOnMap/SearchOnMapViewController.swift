@@ -375,26 +375,43 @@ final class SearchOnMapViewController: UIViewController {
     !isiPad && traitCollection.verticalSizeClass == .regular
   }
 
-  /// The frame the search field occupies once the sheet is fully presented, in `view` coordinates.
+  /// The frame the search field will occupy once the sheet is fully presented, in `view` coordinates.
   ///
-  /// Derived arithmetically rather than by laying the sheet out at its final position, so that
-  /// `availableAreaView.frame` is left where the presentation animation needs to start from. This
-  /// holds because the sheet's width is the same at every step on a portrait iPhone, and
-  /// `contentView`'s origin tracks `availableAreaView`'s.
-  private var fullScreenSearchBarFrame: CGRect {
-    let sheetFrame = ModalPresentationStep.fullScreen.frame(for: availableAreaView, in: self)
-    let barInSheet = headerView.convert(headerView.searchBarFrame, to: contentView)
-    return barInSheet.offsetBy(dx: sheetFrame.minX, dy: sheetFrame.minY)
+  /// Measured by laying the sheet out at its final position and reading the field back, because at
+  /// the point the morph starts nothing has laid this view out at its real size yet:
+  /// `configureModalPresentation` sets `view.frame` only *after* `viewDidLoad` has already run its
+  /// layout pass, against a view still sized zero by `loadView`.
+  private func measureFullScreenSearchBarFrame() -> CGRect {
+    let frameToRestore = availableAreaView.frame
+    availableAreaView.frame = ModalPresentationStep.fullScreen.frame(for: availableAreaView, in: self)
+    view.layoutIfNeeded()
+    let searchBarFrame = headerView.convert(headerView.searchBarFrame, to: view)
+    availableAreaView.frame = frameToRestore
+    view.layoutIfNeeded()
+    return searchBarFrame
   }
 
   /// The frame the search field occupies right now, in `view` coordinates.
-  private var currentSearchBarFrame: CGRect {
-    headerView.convert(headerView.searchBarFrame, to: view)
+  private func measureCurrentSearchBarFrame() -> CGRect {
+    view.layoutIfNeeded()
+    return headerView.convert(headerView.searchBarFrame, to: view)
+  }
+
+  /// Where the search bar sits on the map, in `view` coordinates, or `nil` when that cannot be used.
+  ///
+  /// The bar reports its position in window coordinates, so it is converted here. A frame that is
+  /// empty, or that has ended up outside this view after a rotation, would send the stand-in
+  /// somewhere the bar is not.
+  private func searchBarFrameOnMap(reportedBy reportedFrame: CGRect?) -> CGRect? {
+    guard let reportedFrame else { return nil }
+    let frame = view.convert(reportedFrame, from: nil)
+    guard !frame.isEmpty, view.bounds.contains(frame) else { return nil }
+    return frame
   }
 
   private func addMorphView(at frame: CGRect) -> SearchBarMorphView {
     morphView?.removeFromSuperview()
-    let morphView = SearchBarMorphView(fieldAppearance: headerView.searchFieldAppearance)
+    let morphView = SearchBarMorphView()
     morphView.frame = frame
     view.addSubview(morphView)
     self.morphView = morphView
@@ -410,58 +427,75 @@ final class SearchOnMapViewController: UIViewController {
     }
   }
 
-  /// Animate the map's search pill up into the search field, if this presentation came from the pill.
+  /// Animate the search bar up from the map into the search field, if this presentation came from it.
   ///
   /// Runs on the same curve and duration as the sheet's own slide, so the stand-in and the panel
   /// arrive together.
   ///
   /// `SearchBarMorph.isMorphing` stays set for as long as search is open, not just for this
-  /// animation: the pill's visibility has to stay under the morph's control until it is handed back
-  /// by the reverse animation. Otherwise the pill would reappear for a frame on the way out, because
+  /// animation: the bar's visibility has to stay under the morph's control until it is handed back by
+  /// the reverse animation. Otherwise the bar would reappear for a frame on the way out, because
   /// `SearchOnMapInteractor.closeSearch()` clears `IsSearchPresented` before `close()` is reached.
   private func morphFromSearchButtonIfNeeded() {
-    let source = SearchBarMorph.consumePendingSource()
-    guard canMorphSearchBar, SearchBarMorph.collapseTarget(in: view.bounds.size) != nil else {
-      // Either a layout the morph does not cover, or the pill has never reported a position.
+    // Consumed unconditionally, so a frame left over from a presentation that did not morph cannot
+    // leak into a later one.
+    let pendingFrame = SearchBarMorph.consumePendingFrame()
+    guard canMorphSearchBar, searchBarFrameOnMap(reportedBy: SearchBarMorph.lastFrame) != nil else {
+      // Either a layout the morph does not cover, or the bar has never reported a usable position.
       SearchBarMorph.isMorphing = false
       return
     }
-    // Armed even when there is no source frame, so that search opened by the ⌘F key command or the
-    // 3D-touch action still collapses back into the pill.
+    // Armed even when there is no pending frame, so that search opened by the ⌘F key command or the
+    // 3D-touch action still collapses back into the bar.
     SearchBarMorph.isMorphing = true
 
-    guard let source else { return }
+    guard let source = searchBarFrameOnMap(reportedBy: pendingFrame) else { return }
 
-    let destination = fullScreenSearchBarFrame
-    let morphView = addMorphView(at: view.convert(source.frame, from: nil))
-    morphView.applyPillAppearance()
+    let destination = measureFullScreenSearchBarFrame()
+    guard !destination.isEmpty else {
+      LOG(.warning, "Skipping the search bar morph: the field has no frame at full screen")
+      return
+    }
+
+    let morphView = addMorphView(at: source)
     headerView.setSearchFieldHidden(true)
 
     ModalPresentationAnimator.animate(with: .slide) {
       morphView.frame = destination
-      morphView.applyFieldAppearance()
+      // Lays the icon and label out against the new size inside the animation, so they move with it
+      morphView.setNeedsLayout()
+      morphView.layoutIfNeeded()
     } completion: { [weak self] _ in
       self?.removeMorphView(morphView)
     }
     handOverToSearchField(from: morphView)
   }
 
-  /// Animate the search field back down into the map's search pill, handing the pill back when it lands.
+  /// Animate the search field back down into the search bar's place on the map, handing the bar back
+  /// when it lands.
   private func morphToSearchButtonIfNeeded() {
     guard canMorphSearchBar,
           SearchBarMorph.isMorphing,
-          let destination = SearchBarMorph.collapseTarget(in: view.bounds.size) else {
+          let destination = searchBarFrameOnMap(reportedBy: SearchBarMorph.lastFrame) else {
       SearchBarMorph.isMorphing = false
       return
     }
 
-    let morphView = addMorphView(at: currentSearchBarFrame)
-    morphView.applyFieldAppearance()
+    let source = measureCurrentSearchBarFrame()
+    guard !source.isEmpty else {
+      LOG(.warning, "Skipping the reverse search bar morph: the field has no frame")
+      SearchBarMorph.isMorphing = false
+      return
+    }
+
+    let morphView = addMorphView(at: source)
     headerView.setSearchFieldHidden(true)
 
     ModalPresentationAnimator.animate(with: .slide) {
       morphView.frame = destination
-      morphView.applyPillAppearance()
+      // Lays the icon and label out against the new size inside the animation, so they move with it
+      morphView.setNeedsLayout()
+      morphView.layoutIfNeeded()
     } completion: { [weak self] _ in
       self?.removeMorphView(morphView)
       // Hands the bar back: the overlay shows it again, exactly where the stand-in landed.

@@ -11,7 +11,9 @@ final class SearchOnMapHeaderView: UIView {
   }
 
   private enum Constants {
-    static let searchBarHeight: CGFloat = 36
+    /// Close to the height of a map control, so that the search bar barely changes size as it moves
+    /// up from the map into this header.
+    static let searchBarHeight: CGFloat = 44
     static let searchBarInsets: UIEdgeInsets = UIEdgeInsets(top: 8, left: 10, bottom: 10, right: 0)
     static let grabberHeight: CGFloat = 5
     static let grabberWidth: CGFloat = 36
@@ -121,6 +123,44 @@ final class SearchOnMapHeaderView: UIView {
     ])
   }
 
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    // Applied here rather than in setup because UISearchBarRenderer runs on didMoveToWindow and on
+    // every theme change, and resets the corner radius and background it cares about.
+    applySearchBarAppearance()
+  }
+
+  /// Give the text field the same look as the search bar on the map, so that the bar keeps its
+  /// identity once it becomes the thing you type in.
+  private func applySearchBarAppearance() {
+    let textField = searchBar.searchTextField
+    textField.backgroundColor = SearchBarAppearance.fill
+    textField.font = SearchBarAppearance.font
+    textField.leftView?.tintColor = SearchBarAppearance.iconColor
+    if let placeholder = textField.placeholder {
+      textField.attributedPlaceholder = NSAttributedString(
+        string: placeholder,
+        attributes: [.foregroundColor: SearchBarAppearance.placeholderColor,
+                     .font: SearchBarAppearance.font])
+    }
+
+    let layer = textField.layer
+    layer.cornerCurve = .continuous
+    // From the constant rather than the field's own height: subviews lay out after their parent, so
+    // that height is not settled yet here. An over-large radius is clamped, so this is a capsule
+    // whatever inset UISearchBar gives the field.
+    layer.cornerRadius = SearchBarAppearance.cornerRadius(forHeight: Constants.searchBarHeight)
+    layer.borderWidth = SearchBarAppearance.borderWidth
+    layer.borderColor = SearchBarAppearance.borderColor.resolvedColor(with: traitCollection).cgColor
+    // The bar casts a shadow over the map; keeping it here means the morph has nothing to fade.
+    layer.shadowColor = UIColor.black.cgColor
+    layer.shadowOffset = .zero
+    layer.shadowRadius = SearchBarAppearance.shadowRadius
+    layer.shadowOpacity = SearchBarAppearance.shadowOpacity
+    // A shadow needs to escape the bounds, so the rounding is applied by the mask instead.
+    layer.masksToBounds = false
+  }
+
   @objc private func grabberDidTap() {
     delegate?.grabberDidTap()
   }
@@ -148,22 +188,6 @@ final class SearchOnMapHeaderView: UIView {
   /// The search field's frame, in this view's coordinates. Used to place the morph stand-in.
   var searchBarFrame: CGRect {
     searchBar.frame
-  }
-
-  /// The search field's current look, so that the morph stand-in can land on a matching appearance
-  /// in either theme.
-  ///
-  /// Read off the field rather than hardcoded, with fallbacks for iOS 26, where `UISearchBarRenderer`
-  /// opts out and leaves the field system-drawn: there the field reports neither a background colour
-  /// nor a corner radius, so the stand-in settles on a capsule instead.
-  var searchFieldAppearance: SearchBarMorphView.FieldAppearance {
-    let textField = searchBar.searchTextField
-    let cornerRadius = textField.layer.cornerRadius
-    return SearchBarMorphView.FieldAppearance(backgroundColor: textField.backgroundColor ?? .secondarySystemFill,
-                                              cornerRadius: cornerRadius > 0 ? cornerRadius : Constants.searchBarHeight / 2,
-                                              // matches the placeholder colour set by UISearchBarRenderer
-                                              textColor: .gray,
-                                              tintColor: textField.leftView?.tintColor ?? .secondaryLabel)
   }
 
   /// Hide just the search field and the cancel button, leaving the grabber and separator to move
